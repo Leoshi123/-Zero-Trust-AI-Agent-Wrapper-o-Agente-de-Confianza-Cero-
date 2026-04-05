@@ -1,0 +1,2 @@
+# -Zero-Trust-AI-Agent-Wrapper-o-Agente-de-Confianza-Cero-
+"No confíes en la IA, verifica el contexto, limpia el rastro."  Este proyecto es un middleware de seguridad y optimización para desarrolladores que utilizan agentes de IA (como Claude Code, OpenCode o modelos locales) y quieren evitar el envío de datos sensibles, reducir el gasto de tokens y eliminar código vulnerable o metadatos de rastreo.
