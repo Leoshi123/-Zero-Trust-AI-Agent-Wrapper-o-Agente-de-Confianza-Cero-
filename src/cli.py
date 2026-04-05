@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 🛡️ ZTC-Wrapper - CLI Principal
 
@@ -11,7 +12,20 @@ Interfaz de línea de comandos para:
 import click
 import sys
 import os
+import io
 from pathlib import Path
+
+# Fix encoding para Windows - debe estar al inicio
+if sys.platform == "win32":
+    try:
+        sys.stdout = io.TextIOWrapper(
+            sys.stdout.buffer, encoding="utf-8", errors="replace"
+        )
+        sys.stderr = io.TextIOWrapper(
+            sys.stderr.buffer, encoding="utf-8", errors="replace"
+        )
+    except Exception:
+        pass  # Si falla, continuar de todas formas
 
 from src.sanitizer import MetadataSanitizer
 from src.ast_parser import ASTExtractor
@@ -19,10 +33,20 @@ from src.detector import LegacyShield, Severity
 from src.wrapper import AIAgentWrapper, WrapperConfig
 
 
+def safe_echo(text: str):
+    """Print que maneja encoding issues gracefully."""
+    try:
+        click.echo(text)
+    except UnicodeEncodeError:
+        # Fallback: remover emojis y reintentar
+        clean = text.encode("ascii", "ignore").decode("ascii")
+        click.echo(clean)
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 def cli():
-    """🛡️ ZTC-Wrapper - Security & Context Optimization for AI Agents"""
+    """ZTC-Wrapper - Security & Context Optimization for AI Agents"""
     pass
 
 

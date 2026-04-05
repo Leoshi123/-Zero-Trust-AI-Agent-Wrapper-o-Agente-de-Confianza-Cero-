@@ -8,6 +8,8 @@ Inspirado en OWASP Top 10 y estándares modernos de seguridad.
 """
 
 import re
+import os
+import fnmatch
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
@@ -86,6 +88,13 @@ class LegacyShield:
             severity=Severity.CRITICAL,
             description="subprocess.Popen con shell=True es vulnerable a injection",
             alternative="subprocess.run() o subprocess.Popen con args como lista",
+            language="python",
+        ),
+        ZombiePattern(
+            pattern=r"subprocess\.run\s*\([^)]*shell\s*=\s*True",
+            severity=Severity.CRITICAL,
+            description="subprocess.run con shell=True es vulnerable a command injection",
+            alternative="subprocess.run() sin shell=True, pasando argumentos como lista",
             language="python",
         ),
         ZombiePattern(
@@ -206,17 +215,65 @@ class LegacyShield:
             alternative="Usar vault o secret manager",
             language="general",
         ),
+        # ========== BYPASS DETECTION ==========
+        ZombiePattern(
+            pattern=r"(?i)(ev|ex)\s*[\+\%]\s*(al|ec)",  # "ev" + "al", "ex" + "ec"
+            severity=Severity.CRITICAL,
+            description="Concatenación para evadir detección de eval/exec",
+            alternative="Usar función explícita si es necesario, con validación",
+            language="python",
+        ),
+        ZombiePattern(
+            pattern=r'getattr\s*\(\s*__builtins__\s*,\s*["\'](?:eval|exec|compile)["\']',
+            severity=Severity.CRITICAL,
+            description="Acceso dinámico a eval/exec vía getattr",
+            alternative="Usar funciones explícitas con validación",
+            language="python",
+        ),
     ]
 
-    def __init__(self, languages: Optional[List[str]] = None):
+    def __init__(self, languages: Optional[List[str]] = None, project_path: str = "."):
         """
         Inicializa el detector.
 
         Args:
             languages: Lista de lenguajes a verificar. Si None, todos.
+            project_path: Ruta al proyecto para cargar .ztcignore
         """
         self.languages = languages or ["python", "javascript", "general"]
+        self.project_path = project_path
+        self.ignore_patterns = self._load_ztcignore()
         self._compile_patterns()
+
+    def _load_ztcignore(self) -> List[str]:
+        """Carga patrones del archivo .ztcignore."""
+        ztcignore_path = os.path.join(self.project_path, ".ztcignore")
+        patterns = []
+
+        if os.path.exists(ztcignore_path):
+            try:
+                with open(ztcignore_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            patterns.append(line)
+            except Exception:
+                pass
+
+        return patterns
+
+    def is_ignored(self, file_path: str, line_content: str) -> bool:
+        """Determina si un archivo o línea debe ser ignorada."""
+        # Check magic comment in line
+        if "# ztc: ignore" in line_content or "// ztc: ignore" in line_content:
+            return True
+
+        # Check file patterns
+        for pattern in self.ignore_patterns:
+            if fnmatch.fnmatch(file_path, pattern):
+                return True
+
+        return False
 
     def _compile_patterns(self):
         """Compila los patrones regex."""
@@ -250,8 +307,14 @@ class LegacyShield:
             return results
 
         for line_num, line in enumerate(lines, 1):
+            original_line = line  # Guardar línea original para chequear ignore
             line = line.strip()
-            if not line or line.startswith("#") or line.startswith("//"):
+
+            # Skip comments - pero preservar para check de ignore magic
+            is_comment = line.startswith("#") or line.startswith("//")
+
+            # Check if this line/file should be ignored
+            if self.is_ignored(file_path, original_line):
                 continue
 
             for pattern, zp in self.compiled_patterns:
@@ -268,12 +331,15 @@ class LegacyShield:
 
         return results
 
-    def scan_code(self, code: str) -> List[DetectionResult]:
+    def scan_code(
+        self, code: str, file_path: str = "<inline>"
+    ) -> List[DetectionResult]:
         """
         Escanea código en string.
 
         Args:
             code: Código a analizar
+            file_path: Ruta del archivo (para compatibilidad con ignore)
 
         Returns:
             Lista de resultados
@@ -281,15 +347,18 @@ class LegacyShield:
         results = []
 
         for line_num, line in enumerate(code.split("\n"), 1):
+            original_line = line
             line = line.strip()
-            if not line or line.startswith("#") or line.startswith("//"):
+
+            # Check if ignored
+            if self.is_ignored(file_path, original_line):
                 continue
 
             for pattern, zp in self.compiled_patterns:
                 if pattern.search(line):
                     results.append(
                         DetectionResult(
-                            file_path="<inline>",
+                            file_path=file_path,
                             line_number=line_num,
                             line_content=line,
                             pattern=zp,
@@ -301,7 +370,8 @@ class LegacyShield:
 
     def _generate_suggestion(self, zp: ZombiePattern, line: str) -> str:
         """Genera una sugerencia de refactorización."""
-        return f"⚠️  [{zp.severity.value}] {zp.description}\n✅ Alternativa: {zp.alternative}"
+        severity = zp.severity.value if zp.severity else "UNKNOWN"
+        return f"[{severity}] {zp.description} | Alternativa: {zp.alternative}"
 
     def get_summary(self, results: List[DetectionResult]) -> Dict:
         """Genera un resumen de los hallazgos."""

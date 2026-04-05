@@ -1,0 +1,14 @@
+# ZTC Ignore File
+# Formato: patrones glob (similar a .gitignore)
+# Líneas que empiezan con # son comentarios
+
+# Ignorar archivos de tests legacy
+tests/legacy_*
+test_fixtures/test_false_positives.py
+
+# Ignorar directorio de vendor
+vendor/
+node_modules/
+
+# Patterns con wildcards
+*_test.py
