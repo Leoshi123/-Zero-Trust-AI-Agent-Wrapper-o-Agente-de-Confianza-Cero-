@@ -35,10 +35,15 @@ from src.config import get_project_root
 
 
 def get_project_root_from_file(file_path: str) -> str:
-    """Encuentra la raíz del proyecto desde un archivo."""
-    current = Path(file_path).parent
+    """Encuentra la raíz del proyecto desde un archivo o directorio."""
+    # Si es un directorio, usarlo como inicio; si no, el parent del archivo
+    path = Path(file_path)
+    if path.is_dir():
+        current = path
+    else:
+        current = path.parent
 
-    for _ in range(10):
+    for _ in range(15):
         if (current / ".ztcrc").exists() or (current / ".git").exists():
             return str(current)
         parent = current.parent
@@ -46,7 +51,8 @@ def get_project_root_from_file(file_path: str) -> str:
             break
         current = parent
 
-    return str(Path.cwd())
+    # Fallback: retornar el directorio del archivo
+    return str(Path(file_path).parent if Path(file_path).is_file() else Path(file_path))
 
 
 def safe_echo(text: str):
