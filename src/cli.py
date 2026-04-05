@@ -31,6 +31,22 @@ from src.sanitizer import MetadataSanitizer
 from src.ast_parser import ASTExtractor
 from src.detector import LegacyShield, Severity
 from src.wrapper import AIAgentWrapper, WrapperConfig
+from src.config import get_project_root
+
+
+def get_project_root_from_file(file_path: str) -> str:
+    """Encuentra la raíz del proyecto desde un archivo."""
+    current = Path(file_path).parent
+
+    for _ in range(10):
+        if (current / ".ztcrc").exists() or (current / ".git").exists():
+            return str(current)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+
+    return str(Path.cwd())
 
 
 def safe_echo(text: str):
@@ -223,7 +239,11 @@ def shield():
 def scan(file_path: str, block: bool):
     """Escanea un archivo en busca de código vulnerable."""
 
-    detector = LegacyShield()
+    # Detectar proyecto raíz desde el archivo
+    file_dir = os.path.dirname(os.path.abspath(file_path))
+    project_path = get_project_root_from_file(file_dir)
+
+    detector = LegacyShield(project_path=project_path)
     results = detector.scan_file(file_path)
 
     if not results:
@@ -261,9 +281,13 @@ def scan_dir(directory: str, extensions: tuple):
 
     exts = list(extensions) if extensions else [".py", ".js", ".ts", ".jsx", ".tsx"]
 
-    from src.detector import scan_directory as scan_dir_fn
+    # Detectar proyecto raíz desde el directorio
+    project_path = get_project_root_from_file(directory)
 
-    results = scan_dir_fn(directory, exts)
+    from src.detector import scan_directory as scan_dir_fn
+    from src.detector import LegacyShield
+
+    results = scan_dir_fn(directory, exts, project_path=project_path)
 
     if not results:
         click.echo(f"✅ Directorio limpio: sin problemas detectados")
@@ -274,7 +298,7 @@ def scan_dir(directory: str, extensions: tuple):
     for file_path, file_results in results.items():
         all_results.extend(file_results)
 
-    summary = LegacyShield().get_summary(all_results)
+    summary = LegacyShield(project_path=project_path).get_summary(all_results)
 
     click.echo(f"\n🔍 Escaneo de directorio: {directory}")
     click.echo(f"📊 Archivos con problemas: {len(results)}")

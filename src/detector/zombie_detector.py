@@ -14,6 +14,9 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Importar configuración
+from src.config import ZTCConfig, get_project_root
+
 
 class Severity(Enum):
     """Nivel de severidad del problema."""
@@ -232,17 +235,28 @@ class LegacyShield:
         ),
     ]
 
-    def __init__(self, languages: Optional[List[str]] = None, project_path: str = "."):
+    def __init__(self, languages: Optional[List[str]] = None, project_path: str = None):
         """
         Inicializa el detector.
 
         Args:
             languages: Lista de lenguajes a verificar. Si None, todos.
-            project_path: Ruta al proyecto para cargar .ztcignore
+            project_path: Ruta al proyecto. Si None, auto-detecta.
         """
+        # Auto-detectar proyecto si no se especifica
+        if project_path is None:
+            project_path = get_project_root()
+
         self.languages = languages or ["python", "javascript", "general"]
         self.project_path = project_path
+
+        # Cargar configuración
+        self.config = ZTCConfig.load(project_path)
+        self.exclude_patterns = self.config.detector.exclude_patterns
+
+        # Cargar .ztcignore (compatibilidad hacia atrás)
         self.ignore_patterns = self._load_ztcignore()
+
         self._compile_patterns()
 
     def _load_ztcignore(self) -> List[str]:
@@ -268,10 +282,20 @@ class LegacyShield:
         if "# ztc: ignore" in line_content or "// ztc: ignore" in line_content:
             return True
 
-        # Check file patterns
+        # Check file patterns from .ztcignore
         for pattern in self.ignore_patterns:
             if fnmatch.fnmatch(file_path, pattern):
                 return True
+
+        # Check exclude_patterns from .ztcrc (se aplica al contenido de la línea)
+        for pattern in self.exclude_patterns:
+            try:
+                if re.search(pattern, line_content, re.IGNORECASE):
+                    return True
+            except re.error:
+                # Si el patrón es inválido, usar fnmatch
+                if pattern in line_content:
+                    return True
 
         return False
 
@@ -411,7 +435,7 @@ class LegacyShield:
 
 
 def scan_directory(
-    directory: str, extensions: List[str] = None
+    directory: str, extensions: List[str] = None, project_path: str = None
 ) -> Dict[str, List[DetectionResult]]:
     """
     Escanea todos los archivos en un directorio.
@@ -419,6 +443,7 @@ def scan_directory(
     Args:
         directory: Directorio a escanear
         extensions: Extensiones de archivo a incluir
+        project_path: Ruta al proyecto para cargar configuración
 
     Returns:
         Dict {file_path: [results]}
@@ -427,7 +452,12 @@ def scan_directory(
 
     extensions = extensions or [".py", ".js", ".ts", ".jsx", ".tsx"]
     results = {}
-    shield = LegacyShield()
+
+    # Usar proyecto proporcionado o auto-detectar
+    if project_path is None:
+        project_path = get_project_root()
+
+    shield = LegacyShield(project_path=project_path)
 
     for root, _, files in os.walk(directory):
         for file in files:

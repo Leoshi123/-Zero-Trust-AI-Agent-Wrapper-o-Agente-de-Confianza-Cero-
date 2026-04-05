@@ -1,6 +1,7 @@
 # Dependencias Python
 # Core
 regex>=2023.0.0
+pyyaml>=6.0
 
 # AST Parsing
 tree-sitter>=0.20.0
