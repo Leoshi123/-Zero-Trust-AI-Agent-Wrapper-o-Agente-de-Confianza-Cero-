@@ -23,6 +23,7 @@ Un middleware de seguridad y optimización para desarrolladores que utilizan age
 - 🤖 **AI Agent Wrapper**: Envuelve llamadas a Claude Code/OpenCode con sanitización automática
 - 🌐 **Multi-plataforma**: Windows, macOS, Linux (todas las distribuciones)
 - 🌎 **Multi-idioma (i18n)**: Español + English (más idiomas en desarrollo)
+- 🤖 **MCP Server**: Integración nativa con Claude Code, Cursor, Windsurf
 
 ---
 
@@ -135,6 +136,60 @@ Luego abre: **http://localhost:4901**
 
 ---
 
+## 🤖 MCP Server (Model Context Protocol)
+
+Exponé las capacidades de seguridad del ZTC-Wrapper directamente a agentes de IA (Claude Code, Cursor, Windsurf, etc.) vía MCP.
+
+### Tools disponibles
+
+| Tool | Descripción |
+|------|-------------|
+| `sanitize_code` | Limpia metadata de IA, secretos y rutas absolutas |
+| `scan_code` | Detecta +60 patrones vulnerables en código |
+| `scan_directory` | Escanea directorio completo recursivamente |
+| `prune_context` | Extrae contexto mínimo relevante vía AST |
+| `clean_code` | Limpieza rápida de código (solo metadata) |
+
+### Uso con stdio (Claude Code, Cursor)
+
+Agregá al config de tu cliente MCP:
+
+```json
+{
+  "mcpServers": {
+    "ztc-wrapper": {
+      "command": "python",
+      "args": ["-m", "src.mcp_server"]
+    }
+  }
+}
+```
+
+### Uso como servidor HTTP
+
+```bash
+python -m src.mcp_server http
+```
+
+Escucha en **http://127.0.0.1:8765/mcp**
+
+### Resources expuestos
+
+| Resource | Descripción |
+|----------|-------------|
+| `ztc://version` | Versión del ZTC-Wrapper |
+| `ztc://languages` | Lenguajes soportados y patrones |
+| `ztc://severity-levels` | Niveles de severidad del scanner |
+
+### Prompts predefinidos
+
+| Prompt | Uso |
+|--------|-----|
+| `security_review` | Genera prompt para revisión de seguridad |
+| `prepare_for_ai` | Prepara código para procesamiento por IA |
+
+---
+
 ## 🌍 i18n (Internacionalización)
 
 El proyecto soporta múltiples idiomas:
@@ -189,7 +244,7 @@ Crea un archivo `.ztcrc` en la raíz de tu proyecto:
 | Versión | Feature |
 |---------|---------|
 | v1.0.0 | Initial release |
-| v1.0.1 | **Multi-language (Go, Rust, Java, C/C++) + Multi-OS scripts** |
+| v1.0.1 | **Multi-language (Go, Rust, Java, C/C++) + Multi-OS scripts + MCP Server** |
 
 ---
 
