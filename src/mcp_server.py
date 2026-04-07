@@ -33,8 +33,9 @@ from src.detector import LegacyShield, scan_directory as scan_dir_fn
 
 mcp = FastMCP(
     name="ZTC-Wrapper",
-    description="Zero-Trust AI Agent Security — sanitize, scan, and prune code before AI processing",
-    version="1.0.1",
+    host="127.0.0.1",
+    port=8765,
+    streamable_http_path="/mcp",
 )
 
 
@@ -422,8 +423,4 @@ def _find_project_root(start_path: str) -> str:
 if __name__ == "__main__":
     # Support both stdio (default) and streamable-http
     transport = sys.argv[1] if len(sys.argv) > 1 else "stdio"
-
-    if transport == "http":
-        mcp.run(transport="streamable-http", host="127.0.0.1", port=8765)
-    else:
-        mcp.run(transport="stdio")
+    mcp.run(transport="stdio" if transport != "http" else "streamable-http")
