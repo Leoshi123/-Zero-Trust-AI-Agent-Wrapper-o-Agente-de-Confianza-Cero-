@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "ztc-wrapper": {
+      "command": "python",
+      "args": ["-m", "src.mcp_server"],
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    }
+  },
+  "cursor": {
+    "enabled": true,
+    "blockOnCritical": true,
+    "pruneContext": true,
+    "sanitizeOnGenerate": true
+  }
+}

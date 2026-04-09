@@ -152,6 +152,13 @@ class LegacyShield:
             alternative="hashlib.sha256() o más reciente",
             language="python",
         ),
+        ZombiePattern(
+            pattern=r"tempfile\.mktemp\s*\(",
+            severity=Severity.MEDIUM,
+            description="tempfile.mktemp() es inseguro y propenso a race conditions",
+            alternative="Usar tempfile.TemporaryFile() o tempfile.mkstemp()",
+            language="python",
+        ),
         # ========== JAVASCRIPT ==========
         ZombiePattern(
             pattern=r"\beval\s*\(",
@@ -385,6 +392,21 @@ class LegacyShield:
             severity=Severity.CRITICAL,
             description="Command injection via child_process con concatenación",
             alternative="Usar array de argumentos o execFile",
+            language="javascript",
+        ),
+        # Detectar exec desde destructuración: const { exec } = require('child_process')
+        ZombiePattern(
+            pattern=r"const\s*\{\s*exec\s*\}\s*=\s*require\s*\(\s*['\"]child_process['\"]\s*\)",
+            severity=Severity.CRITICAL,
+            description="exec importado desde child_process - potencial command injection",
+            alternative="Usar execFile o spawn con array de argumentos",
+            language="javascript",
+        ),
+        ZombiePattern(
+            pattern=r"const\s*\{\s*exec\s*\w*\s*\}\s*=\s*require\s*\(\s*['\"]child_process['\"]\s*\)",
+            severity=Severity.CRITICAL,
+            description="Destructuración de child_process con exec - potencial command injection",
+            alternative="Usar execFile o spawn con validación de argumentos",
             language="javascript",
         ),
         ZombiePattern(
@@ -660,14 +682,14 @@ class LegacyShield:
         # Usamos un set para evitar duplicados si el patrón coincide en ambos
         combined_lines = []
         for i, line in enumerate(code.split("\n")):
-            combined_lines.append((i + 1, line, False)) # original
+            combined_lines.append((i + 1, line, False))  # original
 
         norm_lines = normalized_code.split("\n")
         for i, line in enumerate(norm_lines):
             if i < len(combined_lines):
                 # Si la línea normalizada es diferente, la analizamos
                 if line.strip() != combined_lines[i][1].strip():
-                    combined_lines.append((i + 1, line, True)) # normalized
+                    combined_lines.append((i + 1, line, True))  # normalized
 
         for line_num, line, is_normalized in combined_lines:
             original_line = line
@@ -680,14 +702,18 @@ class LegacyShield:
             for pattern, zp in self.compiled_patterns:
                 if pattern.search(line):
                     # Evitar duplicados si la misma línea original y normalizada disparan el mismo patrón
-                    if any(r.line_number == line_num and r.pattern == zp for r in results):
+                    if any(
+                        r.line_number == line_num and r.pattern == zp for r in results
+                    ):
                         continue
 
                     results.append(
                         DetectionResult(
                             file_path=file_path,
                             line_number=line_num,
-                            line_content=f"[NORMALIZED] {line}" if is_normalized else line,
+                            line_content=f"[NORMALIZED] {line}"
+                            if is_normalized
+                            else line,
                             pattern=zp,
                             suggestion=self._generate_suggestion(zp, line),
                         )

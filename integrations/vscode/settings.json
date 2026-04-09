@@ -1,0 +1,27 @@
+{
+  // ZTC-Wrapper Settings for VSCode
+  // Place in: .vscode/settings.json
+  
+  "ztcWrapper": {
+    "enabled": true,
+    "pythonPath": "${workspaceFolder}/venv/Scripts/python.exe",
+    "projectRoot": "${workspaceFolder}",
+    
+    // Security settings
+    "blockOnCritical": true,
+    "pruneContext": true,
+    "sanitizeInput": true,
+    "sanitizeOutput": true
+  },
+  
+  // Keyboard shortcuts for ZTC tasks
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  
+  // File associations
+  "files.associations": {
+    "*.ztcrc": "json"
+  },
+  
+  // Custom keybindings can be added via keybindings.json
+  "workbench.startupEditor": "welcomePage"
+}

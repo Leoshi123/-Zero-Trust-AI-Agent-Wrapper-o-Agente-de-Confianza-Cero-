@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ZTC: Sanitize Code",
+      "type": "shell",
+      "command": "${workspaceFolder}/venv/Scripts/python.exe -m src.cli sanitize scan ${file}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "ZTC: Prune Context",
+      "type": "shell",
+      "command": "${workspaceFolder}/venv/Scripts/python.exe -m src.cli prune extract ${file}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "ZTC: Security Scan",
+      "type": "shell",
+      "command": "${workspaceFolder}/venv/Scripts/python.exe -m src.cli shield scan ${file}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "ZTC: Security Scan Dir",
+      "type": "shell",
+      "command": "${workspaceFolder}/venv/Scripts/python.exe -m src.cli shield scan-dir ${file}",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    }
+  ]
+}

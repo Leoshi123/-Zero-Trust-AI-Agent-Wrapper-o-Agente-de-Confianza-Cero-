@@ -68,12 +68,15 @@ class ASTExtractor:
         },
         "javascript": {
             "import": r"^import\s+.*?from\s+['\"]([^'\"]+)['\"]",
-            "require": r"^const\s+\w+\s*=\s*require\(['\"]([^'\"]+)['\"]",
+            "require": r"^\s*const\s+\{?\s*\w+\s*}?\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+            "require_var": r"^\s*const\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
             "function": r"^(?:function\s+(\w+)|const\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>)",
             "class": r"^class\s+(\w+)",
         },
         "typescript": {
             "import": r"^import\s+.*?from\s+['\"]([^'\"]+)['\"]",
+            "require": r"^\s*const\s+\{?\s*\w+\s*}?\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
+            "require_var": r"^\s*const\s+(\w+)\s*=\s*require\s*\(\s*['\"]([^'\"]+)['\"]\s*\)",
             "function": r"^(?:function\s+(\w+)|const\s+(\w+)\s*=\s*(?:async\s+)?\([^)]*\)\s*=>)",
             "class": r"^class\s+(\w+)",
         },
@@ -239,8 +242,8 @@ class ASTExtractor:
         for i, line in enumerate(lines):
             stripped = line.strip()
 
-            # Detectar imports
-            for imp_pattern in ["import", "from_import"]:
+            # Detectar imports (including require in JS/TS)
+            for imp_pattern in ["import", "from_import", "require", "require_var"]:
                 if imp_pattern in patterns:
                     match = re.match(patterns[imp_pattern], stripped)
                     if match:
@@ -315,8 +318,10 @@ class ASTExtractor:
             if not is_relevant:
                 # Escanear el cuerpo de la función en busca de vulnerabilidades CRITICAL
                 security_results = self.shield.scan_code(body)
-                if any(r.pattern.severity == Severity.CRITICAL for r in security_results):
-                    is_relevant = True # Forzar preservación por seguridad
+                if any(
+                    r.pattern.severity == Severity.CRITICAL for r in security_results
+                ):
+                    is_relevant = True  # Forzar preservación por seguridad
             # ------------------------------------------------------------
 
             if is_relevant:
