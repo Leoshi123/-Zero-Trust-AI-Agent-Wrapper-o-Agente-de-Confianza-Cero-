@@ -15,9 +15,13 @@ import sys
 import os
 import json
 import time
+import traceback
+import logging
+import tempfile
 from pathlib import Path
 from typing import Optional
 from functools import wraps
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from mcp.server.fastmcp import FastMCP, Context
 
@@ -30,22 +34,52 @@ from src.detector import LegacyShield, scan_directory as scan_dir_fn
 
 
 # =============================================================================
-# MCP Server
+# RESILIENCE LAYER
 # =============================================================================
 
+def mcp_error_boundary(func):
+    """Global boundary to prevent server crashes by capturing all exceptions."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            # Log the full traceback for the server operator
+            error_trace = traceback.format_exc()
+            logging.error(f"MCP Tool Error in {func.__name__}:\\n{error_trace}")
+
+            # Return a clean JSON error to the client
+            return json.dumps({
+                "error": "Internal Server Error",
+                "message": str(e),
+                "tool": func.__name__,
+                "status": "failed"
+            }, indent=2)
+    return wrapper
+
 def timeout_handler(seconds: int):
-    """Decorator to enforce tool execution timeouts."""
+    """Decorator to enforce real tool execution timeouts using a ThreadPoolExecutor."""
     def decorator(func):
+        # We use a single-worker executor per tool to ensure the timeout is enforced
+        # and we don't leak threads over time.
+        executor = ThreadPoolExecutor(max_workers=1)
+
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Note: In a real production environment, this would use a separate
-            # process or threading.Timer since Python's GIL limits signal-based
-            # timeouts on some platforms.
             try:
-                # Basic implementation for MCP tools
-                return func(*args, **kwargs)
-            except TimeoutError:
-                return json.dumps({"error": f"Tool execution timed out after {seconds}s"}, indent=2)
+                # Submit the tool function to the executor
+                future = executor.submit(func, *args, **kwargs)
+                # Block until the result is ready or the timeout expires
+                return future.result(timeout=seconds)
+            except FutureTimeoutError:
+                return json.dumps({
+                    "error": "TimeoutError",
+                    "message": f"Tool execution timed out after {seconds}s",
+                    "tool": func.__name__
+                }, indent=2)
+            except Exception as e:
+                # Re-raise to be caught by @mcp_error_boundary
+                raise e
         return wrapper
     return decorator
 
@@ -63,6 +97,8 @@ mcp = FastMCP(
 
 
 @mcp.tool()
+@mcp_error_boundary
+@timeout_handler(30)
 def sanitize_code(
     code: str,
     file_path: Optional[str] = None,
@@ -96,6 +132,8 @@ def sanitize_code(
 
 
 @mcp.tool()
+@mcp_error_boundary
+@timeout_handler(60)
 def scan_code(
     code: str,
     language: str = "python",
@@ -163,6 +201,8 @@ def scan_code(
 
 
 @mcp.tool()
+@mcp_error_boundary
+@timeout_handler(120)
 def scan_directory(
     directory: str,
     extensions: list[str] | None = None,
@@ -247,6 +287,8 @@ def scan_directory(
 
 
 @mcp.tool()
+@mcp_error_boundary
+@timeout_handler(30)
 def prune_context(
     code: str,
     task: str = "general optimization",
@@ -267,16 +309,12 @@ def prune_context(
     Returns:
         JSON string with pruned code, stats, and reduction percentage.
     """
-    # Write temp file if file_path not provided (AST extractor needs a file)
-    temp_path = file_path
-    cleanup = False
-    if not temp_path:
-        temp_path = os.path.join(os.path.dirname(__file__), "_ztc_temp_prune.py")
-        cleanup = True
-
+    # Create a secure, unique temporary file for AST analysis
+    # This prevents race conditions when multiple requests call prune_context simultaneously
     try:
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(code)
+        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tf:
+            tf.write(code)
+            temp_path = tf.name
 
         extractor = ASTExtractor()
         func_list = functions or None
@@ -303,11 +341,14 @@ def prune_context(
             indent=2,
         )
     finally:
-        if cleanup and os.path.exists(temp_path):
+        # Ensure the temporary file is deleted regardless of success or failure
+        if 'temp_path' in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
 
 
 @mcp.tool()
+@mcp_error_boundary
+@timeout_handler(10)
 def clean_code(code: str) -> str:
     """Quick clean of code string — removes AI metadata only (no vulnerability scan).
 

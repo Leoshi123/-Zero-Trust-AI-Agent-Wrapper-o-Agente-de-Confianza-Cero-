@@ -10,6 +10,7 @@ Inspirado en OWASP Top 10 y estándares modernos de seguridad.
 import re
 import os
 import fnmatch
+import ast
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 from enum import Enum
@@ -27,6 +28,63 @@ class Severity(Enum):
     MEDIUM = "MEDIUM"  # Problema moderado
     LOW = "LOW"  # Advertencia menor
     INFO = "INFO"  # Información
+
+
+class PythonASTAnalyzer(ast.NodeVisitor):
+    """
+    Analizador de AST para Python que detecta llamadas a funciones peligrosas.
+    Extiende ast.NodeVisitor para recorrer el árbol sintáctico.
+    """
+    def __init__(self, patterns: List['ZombiePattern']):
+        self.patterns = [p for p in patterns if p.language == "python"]
+        self.findings = []
+
+    def visit_Call(self, node: ast.Call):
+        # Intentar obtener el nombre de la función llamada
+        func_name = ""
+        if isinstance(node.func, ast.Name):
+            func_name = node.func.id
+        elif isinstance(node.func, ast.Attribute):
+            # Para casos como os.system
+            if isinstance(node.func.value, ast.Name):
+                func_name = f"{node.func.value.id}.{node.func.attr}"
+            else:
+                func_name = node.func.attr
+
+        if func_name:
+            # Buscar si el nombre de la función coincide con algún patrón zombi
+            # Usamos regex sobre el nombre ya extraído para mantener compatibilidad con patrones actuales
+            for zp in self.patterns:
+                if re.search(zp.pattern, func_name, re.IGNORECASE):
+                    self.findings.append((node.lineno, zp))
+
+        self.generic_visit(node)
+
+    def analyze(self, code: str, file_path: str) -> List['DetectionResult']:
+        try:
+            tree = ast.parse(code)
+            self.findings = []
+            self.visit(tree)
+
+            results = []
+            for lineno, zp in self.findings:
+                # Recuperar la línea original para el resultado
+                lines = code.splitlines()
+                line_content = lines[lineno-1].strip() if lineno <= len(lines) else ""
+
+                results.append(
+                    DetectionResult(
+                        file_path=file_path,
+                        line_number=lineno,
+                        line_content=line_content,
+                        pattern=zp,
+                        suggestion=f"[{zp.severity.value}] DETECTADO VIA AST: {zp.description} | Alternativa: {zp.alternative}"
+                    )
+                )
+            return results
+        except SyntaxError:
+            # Si el código no es Python válido, el AST falla; el regex seguirá funcionando
+            return []
 
 
 @dataclass
@@ -631,16 +689,24 @@ class LegacyShield:
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
+                code = f.read()
+                lines = code.splitlines(keepends=True)
         except Exception as e:
             return results
 
-        for line_num, line in enumerate(lines, 1):
-            original_line = line  # Guardar línea original para chequear ignore
-            line = line.strip()
+        # --- PASO 1: Análisis AST para Python ---
+        detected_ast = set()
+        if file_path.endswith(".py"):
+            ast_analyzer = PythonASTAnalyzer(self.ZOMBIE_PATTERNS)
+            ast_results = ast_analyzer.analyze(code, file_path)
+            # Usamos id(zp) para asegurar unicidad en el set ya que ZombiePattern no es hashable
+            detected_ast = set((r.line_number, id(r.pattern)) for r in ast_results)
+            results.extend(ast_results)
 
-            # Skip comments - pero preservar para check de ignore magic
-            is_comment = line.startswith("#") or line.startswith("//")
+        # --- PASO 2: Análisis Regex ---
+        for line_num, line in enumerate(lines, 1):
+            original_line = line
+            line = line.strip()
 
             # Check if this line/file should be ignored
             if self.is_ignored(file_path, original_line):
@@ -648,6 +714,10 @@ class LegacyShield:
 
             for pattern, zp in self.compiled_patterns:
                 if pattern.search(line):
+                    # Si ya fue detectado por AST en esta línea con este patrón, saltamos
+                    if file_path.endswith(".py") and (line_num, id(zp)) in detected_ast:
+                        continue
+
                     results.append(
                         DetectionResult(
                             file_path=file_path,
@@ -675,11 +745,22 @@ class LegacyShield:
         """
         results = []
 
-        # Normalización recursiva para detectar obfuscación
+        # --- PASO 1: Análisis AST para Python ---
+        # Intentamos detectar si es python por la extensión o si parece python
+        is_python = file_path.endswith(".py") or (not file_path == "<inline>" and file_path.endswith(".py"))
+
+        if is_python:
+            ast_analyzer = PythonASTAnalyzer(self.ZOMBIE_PATTERNS)
+            ast_results = ast_analyzer.analyze(code, file_path)
+            detected_ast = set((r.line_number, id(r.pattern)) for r in ast_results)
+            results.extend(ast_results)
+        else:
+            detected_ast = set()
+
+        # Normalización recursiva para detectar obfuscación (Sigue siendo útil para Regex)
         normalized_code = self.normalizer.normalize(code)
 
         # Escaneamos tanto la versión original como la normalizada
-        # Usamos un set para evitar duplicados si el patrón coincide en ambos
         combined_lines = []
         for i, line in enumerate(code.split("\n")):
             combined_lines.append((i + 1, line, False))  # original
@@ -687,7 +768,6 @@ class LegacyShield:
         norm_lines = normalized_code.split("\n")
         for i, line in enumerate(norm_lines):
             if i < len(combined_lines):
-                # Si la línea normalizada es diferente, la analizamos
                 if line.strip() != combined_lines[i][1].strip():
                     combined_lines.append((i + 1, line, True))  # normalized
 
@@ -705,6 +785,10 @@ class LegacyShield:
                     if any(
                         r.line_number == line_num and r.pattern == zp for r in results
                     ):
+                        continue
+
+                    # Evitar duplicados con AST
+                    if is_python and not is_normalized and (line_num, id(zp)) in detected_ast:
                         continue
 
                     results.append(
