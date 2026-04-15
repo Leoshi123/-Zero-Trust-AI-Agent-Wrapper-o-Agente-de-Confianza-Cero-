@@ -1,7 +1,5 @@
 import ast
-import os
 import subprocess
-
 
 def safe_eval(data):
     try:

@@ -1,4 +1,3 @@
-
 /**
  * Deep Nesting Stress Test
  * 15+ levels of nesting with a critical vulnerability at the bottom.
