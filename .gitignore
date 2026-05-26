@@ -53,3 +53,8 @@ tmp/
 .coverage
 htmlcov/
 .tox/
+
+# --- AIGatekeeper local ---
+.atl/
+# Note: .aigatekeeper/ has its own internal .gitignore
+#       config.json can be committed if team-sharing is desired
