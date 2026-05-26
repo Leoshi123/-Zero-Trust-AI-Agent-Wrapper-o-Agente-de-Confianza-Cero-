@@ -606,5 +606,16 @@ def unsafe():
         click.echo(f"  [{r.pattern.severity.value}] {r.pattern.description}")
 
 
+# ============================================================================
+# Extensiones: comandos nuevos (init, prompt, scan-prompt, push)
+# ============================================================================
+
+try:
+    from src.cli_extensions import register_commands
+    register_commands(cli)
+except ImportError:
+    pass  # Modo sin extensiones - compatibilidad hacia atras
+
+
 if __name__ == "__main__":
     cli()
