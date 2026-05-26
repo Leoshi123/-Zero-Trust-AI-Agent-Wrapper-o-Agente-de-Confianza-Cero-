@@ -1,5 +1,5 @@
 """
-🛡️ ZTC-Wrapper - Módulo Detector
+🛡️ AG-Wrapper - Módulo Detector
 """
 
 from .zombie_detector import (
@@ -9,6 +9,12 @@ from .zombie_detector import (
     Severity,
     scan_directory,
 )
+from .injection_detector import (
+    PromptInjectDetector,
+    InjectionFinding,
+    InjectionCategory,
+    InjectionPattern,
+)
 
 __all__ = [
     "LegacyShield",
@@ -16,4 +22,8 @@ __all__ = [
     "DetectionResult",
     "Severity",
     "scan_directory",
+    "PromptInjectDetector",
+    "InjectionFinding",
+    "InjectionCategory",
+    "InjectionPattern",
 ]
