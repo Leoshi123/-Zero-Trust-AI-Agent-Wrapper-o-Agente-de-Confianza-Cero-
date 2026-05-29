@@ -45,6 +45,7 @@ dependencies = [
   "jinja2>=3.1.0",
   "mcp[cli]>=1.0.0",
   "python-dotenv",
+  "pytest>=9.0.3",
 ]
 
 [project.optional-dependencies]
@@ -63,12 +64,15 @@ aigatekeeper = "src.cli:cli"
 ag = "src.cli:cli"
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core>=0.10.0"]
+build-backend = "scikit_build_core.build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["src*"]
+[tool.scikit-build]
+# Build C++ module (pyagcore) via CMake + pybind11
+cmake.targets = ["pyagcore"]
+cmake.source-dir = "core"
+# Incluir paquete Python src/ en el wheel
+wheel.packages = ["src"]
 
 [tool.black]
 line-length = 100
